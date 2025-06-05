@@ -1,0 +1,41 @@
+# Unity-generated folders (case-insensitive)
+tongue_XR/[Ll]ibrary/
+tongue_XR/[Tt]emp/
+tongue_XR/[Oo]bj/
+tongue_XR/[Bb]uild/
+tongue_XR/[Bb]uilds/
+tongue_XR/[Ll]ogs/
+tongue_XR/[Mm]emoryCaptures/
+tongue_XR/UserSettings/
+
+# Unity auto-generated files
+tongue_XR/*.csproj
+tongue_XR/*.unityproj
+tongue_XR/*.sln
+tongue_XR/*.suo
+tongue_XR/*.tmp
+tongue_XR/*.user
+tongue_XR/*.userprefs
+tongue_XR/*.pidb
+tongue_XR/*.booproj
+tongue_XR/*.svd
+
+# OS-generated files
+.DS_Store
+*.swp
+*.bak
+*.tmp
+*.log
+
+# Large asset files - optionally use Git LFS instead
+*.psd
+*.mp4
+*.fbx
+*.wav
+*.blend
+
+# VSCode and IDE settings
+.vscode/
+
+# Remove this if you don’t have a Library folder at root:
+#/Library/
