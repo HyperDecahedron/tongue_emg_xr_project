@@ -1,4 +1,6 @@
 # -------------------------- Real Time Classification of Left, Right, Front, None gestures
+# This code predicts 4 classes and sends the prediction to Unity
+# When pressing Esc, the application finishes and creates a .csv with the recorded classes + timestamp
 
 import socket
 import json
@@ -7,11 +9,14 @@ from scipy.signal import butter, filtfilt
 import joblib
 import pandas as pd
 import keyboard 
+import time
+import os
+from datetime import datetime
 
 # OPEN BCI SETTINGS
 UDP_IP = "127.0.0.1"  
 UDP_PORT = 12345  
-WINDOW_SIZE = 250  # 0.5 seconds at 250 Hz
+WINDOW_SIZE = 250  # samples at 250 Hz
 
 # SENDING TO UNITY
 UNITY_IP = "130.229.189.54"  # Replace with your Quest/Unity machine's IP if needed
@@ -63,6 +68,14 @@ clf_rf = joblib.load('C:/Quick_Disk/tonge_project/notebooks/4_classes_rf.pkl')
 # Features names
 cols = [f"{ch}_{feat}" for ch in ['ch_1', 'ch_2', 'ch_3'] for feat in ['RMS', 'ZC', 'WL']]
 
+# Setup CSV logging
+now = datetime.now()
+output_dir = "data/online_annotations"
+os.makedirs(output_dir, exist_ok=True)
+csv_filename = f"{output_dir}/online_classes_{now.day}_{now.month}_{now.hour}.csv"
+if not os.path.exists(csv_filename):
+    with open(csv_filename, 'w') as f:
+        f.write("class,timestamp\n")
 
 try:
     while True:
@@ -119,8 +132,13 @@ try:
                     send_sock.sendto(str(prediction_rf[0]).encode(), (UNITY_IP, UNITY_PORT))
                     #print(f"Sent '{prediction_rf}' to Unity at {UNITY_IP}:{UNITY_PORT}")
 
+                    # Log prediction and timestamp
+                    timestamp = time.time()
+                    with open(csv_filename, 'a') as f:
+                        f.write(f"{prediction_rf[0]},{timestamp}\n")
+
                     # Clear buffers
-                    # leave the 50 last samples?
+                    # - leave the 50 last samples?
                     buffer_ch1.clear()
                     buffer_ch2.clear()
                     buffer_ch3.clear()
