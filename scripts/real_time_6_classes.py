@@ -29,6 +29,13 @@ def notch_filter(signal, freq=50.0, fs=250, quality=30):
     filtered_signal = filtfilt(b, a, signal)
     return filtered_signal
 
+def tkeo(signal):
+    # Teager-Kaiser Energy Operator 
+    output = np.zeros_like(signal)
+    for i in range(1, len(signal) - 1):
+        output[i] = signal[i]**2 - signal[i - 1] * signal[i + 1]  
+    return output
+
 # -------------- Feature functions 
 def rms(signal):
     return np.sqrt(np.mean(signal**2))
@@ -69,7 +76,7 @@ def mean_frequency(signal, fs=250):
 # OPEN BCI SETTINGS
 UDP_IP = "127.0.0.1"  
 UDP_PORT = 12345  
-WINDOW_SIZE = 375  # samples at 250 Hz
+WINDOW_SIZE = 125  # samples at 250 Hz
 
 # SENDING TO UNITY
 UNITY_IP = "130.229.189.54"  # Replace with Quest/Unity machine's IP 
@@ -87,11 +94,11 @@ buffer_ch1 = []
 buffer_ch2 = []
 buffer_ch3 = []
 
-# Load SVM and RF models
-clf_rf = joblib.load('C:/Quick_Disk/tonge_project/notebooks/6_classes_rf_17_09.pkl')
+clf_rf = joblib.load('C:/Quick_Disk/tonge_project/notebooks/6_classes_rf_cont_18_06.pkl')
+scaler = joblib.load('C:/Quick_Disk/tonge_project/notebooks/6_classes_scaler_rf_cont_18_06.pkl')
 
 # Features names
-cols = [f"{ch}_{feat}" for ch in ['ch_1', 'ch_2', 'ch_3'] for feat in ['RMS', 'ZC', 'WL', 'MAV']]
+cols = [f"{ch}_{feat}" for ch in ['ch_1', 'ch_2', 'ch_3'] for feat in ['RMS', 'RMS_SD', 'ZC', 'WL', 'MAV', 'STD', 'VAR', 'IAV', 'MF']]
 
 # Setup CSV logging
 #now = datetime.now()
@@ -140,6 +147,11 @@ try:
                     arr2 = bandpass_filter(arr2)
                     arr3 = bandpass_filter(arr3)
 
+                    # TKEO
+                    arr1 = tkeo(arr1)
+                    arr2 = tkeo(arr2)
+                    arr3 = tkeo(arr3)
+
                     # Z-score normalization
                     #arr1_z = (arr1_filt - np.mean(arr1_filt)) / np.std(arr1_filt)
                     #arr2_z = (arr2_filt - np.mean(arr2_filt)) / np.std(arr2_filt)
@@ -149,13 +161,22 @@ try:
                     feats = []
                     for ch_signal in [arr1, arr2, arr3]:
                         feats.append(rms(ch_signal))
+                        feats.append(rms_signed_difference(ch_signal))
                         feats.append(zero_crossings(ch_signal))
                         feats.append(waveform_length(ch_signal))
                         feats.append(mav(ch_signal))
+                        feats.append(np.std(ch_signal))
+                        feats.append(np.var(ch_signal))
+                        feats.append(iav(ch_signal))
+                        feats.append(mean_frequency(ch_signal))
+
+                    # Scale features
+                    X_live = pd.DataFrame([feats], columns=cols)
+                    X_scaled = scaler.transform(X_live)
 
                     # Prediction
-                    X_live = pd.DataFrame([feats], columns=cols)
-                    prediction_rf = clf_rf.predict(X_live)              # RF
+                    X_scaled_df = pd.DataFrame(X_scaled, columns=cols)
+                    prediction_rf = clf_rf.predict(X_scaled_df)
                     print("Predicted: ", prediction_rf[0])
 
                     # Send to Unity
@@ -169,7 +190,7 @@ try:
 
                     # Clear buffers
                     # keep last 'shift' samples
-                    shift = 300
+                    shift = WINDOW_SIZE - 50
                     buffer_ch1 = buffer_ch1[-shift:]
                     buffer_ch2 = buffer_ch2[-shift:]
                     buffer_ch3 = buffer_ch3[-shift:]
