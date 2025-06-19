@@ -1,6 +1,7 @@
-# -------------------------- Real Time Classification of Left, Right, Front, None gestures
-# This code predicts 6 classes 
-# When pressing Esc, the application finishes and creates a .csv with the recorded classes + timestamp
+
+# -------------------------- Real Time Classification: Left, Left-front, Front, Right-front, Right, Swallow, None
+
+# When pressing Esc, the application finishes
 
 import socket
 import json
@@ -12,8 +13,9 @@ import keyboard
 import time
 import os
 from datetime import datetime
+from pathlib import Path
 
-# FUNCTIONS -----------------------------------------------------------------------
+# -------------- Filter functions 
 
 def bandpass_filter(data, lowcut=5.0, highcut=50.0, fs=250.0, order=4):
     nyq = 0.5 * fs
@@ -29,14 +31,14 @@ def notch_filter(signal, freq=50.0, fs=250, quality=30):
     filtered_signal = filtfilt(b, a, signal)
     return filtered_signal
 
-def tkeo(signal):
-    # Teager-Kaiser Energy Operator 
+def tkeo(signal):  # Teager-Kaiser Energy Operator 
     output = np.zeros_like(signal)
     for i in range(1, len(signal) - 1):
         output[i] = signal[i]**2 - signal[i - 1] * signal[i + 1]  
     return output
 
 # -------------- Feature functions 
+
 def rms(signal):
     return np.sqrt(np.mean(signal**2))
 
@@ -62,8 +64,7 @@ def rms_signed_difference(signal):
     return np.sqrt(np.mean(diff**2))
 
 def mean_frequency(signal, fs=250):
-    # Compute FFT
-    freqs = np.fft.rfftfreq(len(signal), d=1/fs)
+    freqs = np.fft.rfftfreq(len(signal), d=1/fs) # Compute FFT
     fft_vals = np.abs(np.fft.rfft(signal))
     power = fft_vals ** 2
     if np.sum(power) == 0:
@@ -71,7 +72,7 @@ def mean_frequency(signal, fs=250):
     mf = np.sum(freqs * power) / np.sum(power)
     return mf
 
-# ---------------------------------------------------------------------------------
+# -----------------------------------------------------
 
 # OPEN BCI SETTINGS
 UDP_IP = "127.0.0.1"  
@@ -79,12 +80,11 @@ UDP_PORT = 12345
 WINDOW_SIZE = 125  # samples at 250 Hz
 
 # SENDING TO UNITY
-UNITY_IP = "130.229.189.54"  # Replace with Quest/Unity machine's IP 
-UNITY_PORT = 5052
+#UNITY_IP = "130.229.189.54"  # Replace with Quest/Unity machine's IP 
+#UNITY_PORT = 5052
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((UDP_IP, UDP_PORT))
-
 send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 print("Listening for UDP packets... (Press ESC to stop)")
@@ -94,13 +94,22 @@ buffer_ch1 = []
 buffer_ch2 = []
 buffer_ch3 = []
 
-clf_rf = joblib.load('C:/Quick_Disk/tonge_project/notebooks/6_classes_rf_cont_18_06.pkl')
-scaler = joblib.load('C:/Quick_Disk/tonge_project/notebooks/6_classes_scaler_rf_cont_18_06.pkl')
+# Get the directory of the current script
+script_dir = Path(__file__).resolve().parent
+
+# Navigate to the model and scaler files
+notebooks_dir = script_dir.parent / 'notebooks'
+clf_rf_path = notebooks_dir / '6_classes_rf_cont_18_06.pkl'
+scaler_path = notebooks_dir / '6_classes_scaler_rf_cont_18_06.pkl'
+
+# Load the files
+clf_rf = joblib.load(clf_rf_path)
+scaler = joblib.load(scaler_path)
 
 # Features names
 cols = [f"{ch}_{feat}" for ch in ['ch_1', 'ch_2', 'ch_3'] for feat in ['RMS', 'RMS_SD', 'ZC', 'WL', 'MAV', 'STD', 'VAR', 'IAV', 'MF']]
 
-# Setup CSV logging
+# CSV logging
 #now = datetime.now()
 #output_dir = "data/online_annotations"
 #os.makedirs(output_dir, exist_ok=True)
