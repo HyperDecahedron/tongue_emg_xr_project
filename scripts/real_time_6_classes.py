@@ -14,14 +14,26 @@ from datetime import datetime
 from pathlib import Path
 from pynput import keyboard  
 
+BANDPASS_LOW = 10.0   
+BANDPASS_HIGH = 50.0  
+NOTCH_FREQ = 50.0     
+FS = 250.0            # Sampling rate
+FILTER_ORDER = 4
+
 # -------------- Filter functions 
 
-def bandpass_filter(data, lowcut=5.0, highcut=50.0, fs=250.0, order=4):
+def bandpass_filter(data, lowcut=BANDPASS_LOW, highcut=BANDPASS_HIGH, fs=FS, order=FILTER_ORDER):
     nyq = 0.5 * fs
     low = lowcut / nyq
     high = highcut / nyq
     b, a = butter(order, [low, high], btype='band')
     return filtfilt(b, a, data)
+
+def high_pass_filter(signal, cutoff=BANDPASS_LOW, fs=FS, order=FILTER_ORDER):
+    nyquist = 0.5 * fs
+    normal_cutoff = cutoff / nyquist
+    b, a = butter(order, normal_cutoff, btype='high', analog=False)
+    return filtfilt(b, a, signal)
 
 def notch_filter(signal, freq=50.0, fs=250, quality=30):
     nyquist = 0.5 * fs
