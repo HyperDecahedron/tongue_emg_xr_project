@@ -4,10 +4,10 @@ import socket
 import json
 import numpy as np
 from scipy.signal import butter, filtfilt, iirnotch
-import keyboard
 import time
 import csv
 from pathlib import Path
+from pynput import keyboard  
 
 # --------------------- Filter functions
 
@@ -48,12 +48,20 @@ buffer_ch3 = []
 
 max_abs = [0.0, 0.0, 0.0]  # Will store max absolute value per channel
 
-try:
-    while True:
-        if keyboard.is_pressed('esc'):
-            print("ESC pressed. Saving max values and exiting...")
-            break
+stop_flag = False
 
+def on_press(key):
+    global stop_flag
+    if key == keyboard.Key.esc:
+        print("ESC pressed. Saving max values and exiting...")
+        stop_flag = True
+        return False
+
+listener = keyboard.Listener(on_press=on_press)
+listener.start()
+
+try:
+    while not stop_flag:
         data, addr = sock.recvfrom(4096)
         try:
             packet = json.loads(data.decode())
@@ -106,6 +114,7 @@ except KeyboardInterrupt:
 
 finally:
     sock.close()
+    listener.stop()
     # Save to CSV
     save_path = Path("max_abs_values.csv")
     with open(save_path, mode='w', newline='') as file:

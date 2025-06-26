@@ -8,7 +8,7 @@ import numpy as np
 from scipy.signal import butter, filtfilt, iirnotch
 import joblib
 import pandas as pd
-import keyboard 
+from pynput import keyboard
 import time
 import os
 from datetime import datetime
@@ -83,6 +83,20 @@ def mean_frequency(signal, fs=250):
 
 # -----------------------------------------------------
 
+stop_flag = False
+
+def on_press(key):
+    global stop_flag
+    if key == keyboard.Key.esc:
+        print("ESC pressed. Exiting...")
+        stop_flag = True
+        return False
+
+listener = keyboard.Listener(on_press=on_press)
+listener.start()
+
+#------
+
 # OPEN BCI SETTINGS
 UDP_IP = "127.0.0.1"  
 UDP_PORT = 12345  
@@ -126,11 +140,7 @@ except Exception as e:
 cols = [f"{ch}_{feat}" for ch in ['ch_1', 'ch_2', 'ch_3'] for feat in ['RMS', 'RMS_SD', 'ZC', 'WL', 'MAV', 'STD', 'VAR', 'IAV', 'MF']]
 
 try:
-    while True:
-
-        if keyboard.is_pressed('esc'):  
-            print("ESC pressed. Exiting...")
-            break
+    while not stop_flag:
 
         data, addr = sock.recvfrom(4096)
         try:
@@ -209,4 +219,5 @@ except KeyboardInterrupt:
     print("Interrupted by user.")
 
 finally:
+    listener.stop()
     sock.close()

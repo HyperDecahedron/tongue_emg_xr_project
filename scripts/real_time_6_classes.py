@@ -1,4 +1,3 @@
-
 # -------------------------- Real Time Classification: Left, Left-front, Front, Right-front, Right, Swallow, None
 
 # When pressing Esc, the application finishes
@@ -9,11 +8,11 @@ import numpy as np
 from scipy.signal import butter, filtfilt, iirnotch
 import joblib
 import pandas as pd
-import keyboard 
 import time
 import os
 from datetime import datetime
 from pathlib import Path
+from pynput import keyboard  
 
 # -------------- Filter functions 
 
@@ -118,13 +117,20 @@ cols = [f"{ch}_{feat}" for ch in ['ch_1', 'ch_2', 'ch_3'] for feat in ['RMS', 'R
 #    with open(csv_filename, 'w') as f:
 #        f.write("class,timestamp\n")
 
+stop_flag = False
+
+def on_press(key):
+    global stop_flag
+    if key == keyboard.Key.esc:
+        print("ESC pressed. Exiting...")
+        stop_flag = True
+        return False
+
+listener = keyboard.Listener(on_press=on_press)
+listener.start()
+
 try:
-    while True:
-
-        if keyboard.is_pressed('esc'):  
-            print("ESC pressed. Exiting...")
-            break
-
+    while not stop_flag:
         data, addr = sock.recvfrom(4096)
         try:
             packet = json.loads(data.decode())
@@ -212,3 +218,4 @@ except KeyboardInterrupt:
 
 finally:
     sock.close()
+    listener.stop()
