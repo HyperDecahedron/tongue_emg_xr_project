@@ -41,9 +41,10 @@ def get_data():
 
 def collect_labeled_data(label):
     global i
-    print(f"\nLabel '{label}' pressed. Clearing buffer...")
+    
     _ = get_data()  # Clear buffer
 
+    print(f"\nLabel '{label}' pressed. Buffer clear...")
     time.sleep(SAMPLE_DURATION)
 
     print("Collecting data...")
