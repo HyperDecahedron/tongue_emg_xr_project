@@ -5,6 +5,10 @@ import joblib
 from scipy.signal import butter, filtfilt, iirnotch, hilbert, find_peaks
 from pykalman import KalmanFilter
 import pywt
+import pandas as pd
+import tkinter as tk
+from tkinter import ttk
+import threading
 
 # ---------------- Settings -----------------
 USE_BANDPASS = 1
@@ -17,10 +21,15 @@ USE_ZSCORE = 0
 USE_SCALING = 1
 
 sampling_rate = 1500
-window_size_seconds = 1.75
+window_size_seconds = 1.25
 window_size_samples = int(window_size_seconds * sampling_rate)
 
 channels = ['ch_1', 'ch_2', 'ch_3']
+
+# Pressure ranges (slight, medium, hard)
+SLIGHT_PRESSURE = 30
+MEDIUM_PRESSURE = 60
+HARD_PRESSURE = 100
 
 # ---------------- Filters -----------------
 def bandpass_filter(data, lowcut=5.0, highcut=120.0, fs=sampling_rate, order=4):
@@ -87,19 +96,85 @@ def mean_frequency(signal, fs=sampling_rate):
     return np.sum(freqs * power) / np.sum(power)
 
 def extract_features(window):
+    feature_names = ['RMS', 'RMS_SD', 'ZC', 'WL', 'MAV', 'STD', 'VAR', 'IAV', 'MF']
     feats = []
     for ch_idx in range(len(channels)):
         ch_signal = window[:, ch_idx]
-        feats.append(rms(ch_signal))
-        feats.append(rms_signed_difference(ch_signal))
-        feats.append(zero_crossings(ch_signal))
-        feats.append(waveform_length(ch_signal))
-        feats.append(mav(ch_signal))
-        feats.append(np.std(ch_signal))
-        feats.append(np.var(ch_signal))
-        feats.append(iav(ch_signal))
-        feats.append(mean_frequency(ch_signal))
-    return np.array(feats).reshape(1, -1)
+        feats.extend([
+            rms(ch_signal),
+            rms_signed_difference(ch_signal),
+            zero_crossings(ch_signal),
+            waveform_length(ch_signal),
+            mav(ch_signal),
+            np.std(ch_signal),
+            np.var(ch_signal),
+            iav(ch_signal),
+            mean_frequency(ch_signal)
+        ])
+    cols = [f"{ch}_{feat}" for ch in channels for feat in feature_names]
+    return pd.DataFrame([feats], columns=cols)
+
+# ---------------- GUI Setup ----------------------
+class EMGApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("EMG UI")
+        self.root.geometry("550x300")
+        self.root.configure(bg="white")
+
+        self.bulb_colors = {"off": "gray", "l": "green", "f": "green", "r": "green", "s": "yellow"}
+        self.positions = ['l', 'f', 'r', 's']
+
+        # Bulbs
+        self.bulbs = {}
+        for i, pos in enumerate(self.positions):
+            canvas = tk.Canvas(root, width=60, height=60, bg="white", highlightthickness=0)
+            canvas.grid(row=0, column=i, padx=10, pady=20)
+            bulb = canvas.create_oval(10, 10, 50, 50, fill=self.bulb_colors["off"])
+            self.bulbs[pos] = (canvas, bulb)
+
+        # Sliders + Labels for pressure level
+        self.sliders = {}
+        self.slider_labels = {}
+        for i, label in enumerate(['Left', 'Front', 'Right']):
+            tk.Label(root, text=label, bg="white").grid(row=1+i, column=0, sticky='w', padx=10)
+
+            slider = ttk.Scale(root, from_=0, to=100, orient='horizontal', length=300)
+            slider.grid(row=1+i, column=1, columnspan=2, pady=5)
+            self.sliders[label.lower()] = slider
+
+            level_label = tk.Label(root, text="None", bg="white", fg="black", width=8)
+            level_label.grid(row=1+i, column=3, padx=10)
+            self.slider_labels[label.lower()] = level_label
+
+    def update_bulbs(self, pred_label):
+        for pos, (canvas, bulb) in self.bulbs.items():
+            color = self.bulb_colors[pred_label] if pos == pred_label else self.bulb_colors["off"]
+            canvas.itemconfig(bulb, fill=color)
+
+    def update_sliders(self, pressure_values):
+        keys = ['left', 'front', 'right']
+        for i, val in enumerate(pressure_values):
+            key = keys[i]
+            val_clamped = max(0, min(100, val))
+            self.sliders[key].set(val_clamped)
+
+            # Determine level
+            if val_clamped <= 5:
+                level_text = "None"
+                color = "black"
+            elif val_clamped < SLIGHT_PRESSURE:
+                level_text = "Slight"
+                color = "green"
+            elif val_clamped < MEDIUM_PRESSURE:
+                level_text = "Medium"
+                color = "orange"
+            else:
+                level_text = "Hard"
+                color = "red"
+
+            self.slider_labels[key].config(text=level_text, fg=color)
+
 
 # ---------------- Data acquisition ----------------
 def get_data():
@@ -108,9 +183,13 @@ def get_data():
         response = requests.get(url)
         if response.status_code == 200:
             json_data = response.json()
-            emg_1 = json_data['channels'][0]['samples']
-            emg_2 = json_data['channels'][1]['samples']
-            emg_3 = json_data['channels'][2]['samples']
+            channels_data = json_data.get('channels', [])
+            if len(channels_data) < 3:
+                #print(f"Warning: expected 3 channels but got {len(channels_data)}")
+                return []
+            emg_1 = channels_data[0]['samples']
+            emg_2 = channels_data[1]['samples']
+            emg_3 = channels_data[2]['samples']
             return list(zip(emg_1, emg_2, emg_3))
         else:
             print(f"Error: Unable to fetch data. Status code: {response.status_code}")
@@ -119,16 +198,27 @@ def get_data():
         print(f"Exception in get_data: {e}")
         return []
 
+
 # ---------------- Main online classification ----------------
-def main():
+
+
+def run_model_loop(app):
+
     # Load models and scalers
     pos_clf = joblib.load("../notebooks/models/4_classes_cont_01_07.pkl")
     pos_scaler = joblib.load("../notebooks/models/4_classes_scaler_cont_01_07.pkl") if USE_SCALING else None
-
     pressure_regressor = joblib.load("../notebooks/models/regressor_01_07.joblib") # whole pipeline already included, it is not necessary to upload the scaler
 
     # Buffers for data
     buffer = [] 
+
+    # State variables for your new filtering logic
+    swallow_count = 0
+    override_to_r = False
+
+    override_active = False
+    override_label = None
+    override_count = 0
 
     print(f"Starting online classification with window size {window_size_seconds}s ({window_size_samples} samples)...")
 
@@ -172,6 +262,7 @@ def main():
             # Scale features for position classifier if needed
             if USE_SCALING and pos_scaler is not None:
                 feats_pos = pos_scaler.transform(feats)
+                feats_pos = pd.DataFrame(feats_pos, columns=feats.columns) 
             else:
                 feats_pos = feats
 
@@ -183,11 +274,92 @@ def main():
             # Predict pressure
             pressure_pred = pressure_regressor.predict(feats_pressure)
 
-            print(f"Position prediction: {pos_pred[0]}, Pressure prediction: {pressure_pred[0]}")
+            # Print original predictions
+            print(f"Original Position prediction: {pos_pred[0]}, Original Pressure prediction: {pressure_pred}")
 
+            # -------- Additional filtering ---------
+
+            # Keep only the highest pressure, set others to 0
+            pressure_pred = pressure_pred[0]  
+            max_idx = np.argmax(pressure_pred)
+            filtered_pressure = np.zeros_like(pressure_pred)
+            filtered_pressure[max_idx] = pressure_pred[max_idx]
+
+            pos_label = pos_pred[0]  # e.g. 'l', 'f', 'r', 'n', 's'
+
+            # Final filter: if a class l, f or r is happening for more than 4 instances, ALL following classes
+            # are overriden to that class until a class 'n' is detected. Class 's' is an exceptio to this. 
+
+
+            # Logic: track consecutive 's' (swallow) predictions
+            if pos_label == 's':
+                swallow_count += 1
+            else:
+                swallow_count = 0  # reset if not 's'
+
+            # Reset override if position is 'n'
+            if pos_label in ['n']:
+                override_to_r = False
+
+            # Activate override condition if swallow_count > 3 and max_idx == 2 ('r')
+            if swallow_count >= 2 and max_idx == 2:
+                override_to_r = True
+
+            # Apply override if active
+            if override_to_r:
+                pos_label = 'r'
+
+            # Positions that don't require adjustment
+            if pos_label in ['n', 's']:
+                # do nothing, keep filtered_pressure as is
+                pass
+            else:
+                # Map position label to expected pressure index
+                pos_to_idx = {'l': 0, 'f': 1, 'r': 2}
+                expected_idx = pos_to_idx.get(pos_label, None)
+
+                if expected_idx is not None:
+                    # Check if filtered pressure corresponds to expected position
+                    if filtered_pressure.argmax() != expected_idx:
+                        # Pressure indicates a different position than predicted
+                        # Override position label to the pressure position
+                        idx_to_pos = {v: k for k, v in pos_to_idx.items()}
+                        pos_label = idx_to_pos[filtered_pressure.argmax()]
+
+            # -------- Override filtering ---------
+            # Track how many consecutive times the same 'l','f','r' position occurs
+            if pos_label in ['l', 'f', 'r']:
+                if override_active:
+                    if pos_label == override_label:
+                        override_count += 1
+                else:
+                    override_active = True
+                    override_label = pos_label
+                    override_count = 1
+            elif pos_label == 'n':
+                # Reset override on 'n'
+                override_active = False
+                override_label = None
+                override_count = 0
+
+            # If override active for more than x times, force override on all following (except 'n')
+            if override_active and override_count > 2:
+                if pos_label not in ['n']:
+                    pos_label = override_label
+
+            # Print filtered/final predictions
+            print(f"--Filtered Position prediction: {pos_label}, Filtered Pressure prediction: {filtered_pressure}")
+
+            # Update UI with filtered predictions
+            app.root.after(0, app.update_bulbs, pos_label)
+            app.root.after(0, app.update_sliders, filtered_pressure)
         else:
             # Sleep shortly to avoid busy loop
-            time.sleep(0.01)
+            time.sleep(0.5)
 
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    app = EMGApp(root)
+
+    threading.Thread(target=run_model_loop, args=(app,), daemon=True).start()
+    root.mainloop()
