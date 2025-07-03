@@ -96,6 +96,7 @@ def start_listener():
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
 
+print("Objective: 10 samples/class. Total: 120")
 print("Press Q = 'l0' class, P = change class via terminal, other keys = current class. ESC to stop.")
 
 listener_thread = threading.Thread(target=start_listener)

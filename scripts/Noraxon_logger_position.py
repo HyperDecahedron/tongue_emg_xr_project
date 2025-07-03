@@ -3,7 +3,6 @@ import requests
 from pynput import keyboard
 import time, csv, os
 from datetime import datetime
-import tkinter as tk
 import threading
 
 # Create data directory
@@ -12,7 +11,7 @@ os.makedirs(save_dir, exist_ok=True)
 
 # Output file path
 now = datetime.now()
-filename = f"6_classes_{now.strftime('%d-%m-hour-%H-min-%M')}.csv"
+filename = f"4_classes_{now.strftime('%d-%m-hour-%H-min-%M')}.csv"
 save_path = os.path.join(save_dir, filename)
 
 # Global list to collect all labeled data
@@ -20,27 +19,8 @@ all_data = []
 i = 1  # window counter
 
 # Constants
-LABEL_KEYS = ['l', 'k', 'f', 'e', 'r', 's', 'n']
-SAMPLE_DURATION = 4  # seconds
-
-# --- UI Setup ---
-root = tk.Tk()
-root.title("Noraxon EMG Logger")
-root.configure(bg="white")
-canvas = tk.Canvas(root, width=200, height=200, bg="white", highlightthickness=0)
-canvas.pack()
-label_text = tk.StringVar()
-label_display = tk.Label(root, textvariable=label_text, font=("Arial", 16), bg="white")
-label_display.pack()
-
-circle = canvas.create_oval(50, 50, 150, 150, fill="red", outline="black")
-
-def set_circle(color, label=None):
-    canvas.itemconfig(circle, fill=color)
-    if label:
-        label_text.set(f"Label: '{label}'")
-    else:
-        label_text.set("")
+LABEL_KEYS = ['l', 'f', 'r', 's', 'n']
+SAMPLE_DURATION = 3  # seconds
 
 # --- Data Acquisition ---
 def get_data():
@@ -66,14 +46,9 @@ def collect_labeled_data(label):
 
     _ = get_data()  # Clear buffer
 
-    # UI feedback
-    set_circle("green", label)
-    root.update()
-
     print(f"\nLabel '{label}' pressed. Buffer clear...")
     time.sleep(SAMPLE_DURATION)
 
-    print("Collecting data...")
     samples = get_data()
     if samples:
         for s in samples:
@@ -83,9 +58,6 @@ def collect_labeled_data(label):
     else:
         print("[WARN] No samples collected.")
 
-    # Return UI to idle state
-    set_circle("red")
-    root.update()
 
 def on_press(key):
     try:
@@ -102,7 +74,6 @@ def on_release(key):
             writer.writerow(["window", "label", "ch_1", "ch_2", "ch_3"])  # Updated header
             writer.writerows(all_data)
         print(f"[DONE] Saved annotations to {save_path}")
-        root.quit()
         return False
 
 # Start key listener in a thread so it doesn't block tkinter
@@ -110,11 +81,15 @@ def start_listener():
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
 
-print("Press l = left, k = left-front, f = front, e = right-front, r = right, s = swallow, n = none. ESC to stop.")
+print("Objective: 30 samples/class. Total: 150")
+print("Press l = left, f = front, r = right, s = swallow, n = none. ESC to stop.")
 
 listener_thread = threading.Thread(target=start_listener)
 listener_thread.daemon = True
 listener_thread.start()
 
-# Start the UI loop
-root.mainloop()
+# Keep main thread alive
+while listener_thread.is_alive():
+    time.sleep(0.1)
+
+
