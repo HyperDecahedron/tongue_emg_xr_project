@@ -4,26 +4,23 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using UnityEngine;
-using Unity.XR.CoreUtils; 
 
 public class UDP_Listener : MonoBehaviour
 {
-    public XROrigin xrOrigin; 
+    private UdpClient udpClient;
+    private Thread receiveThread;
 
-    UdpClient udpClient;
-    Thread receiveThread;
+    public string currentClass = "n";
+    public int[] currentPressure = new int[3];
 
-    float moveAmount = 0.1f;
+    public event Action<string> OnClassReceived; // event for updates
 
     void Start()
     {
-        udpClient = new UdpClient(5052);  // Match the port in Python
-        receiveThread = new Thread(new ThreadStart(ReceiveData));
+        udpClient = new UdpClient(5052);
+        receiveThread = new Thread(ReceiveData);
         receiveThread.IsBackground = true;
         receiveThread.Start();
-
-        // Ensure dispatcher is initialized
-        UnityMainThreadDispatcher.Instance();
     }
 
     void ReceiveData()
@@ -34,46 +31,44 @@ public class UDP_Listener : MonoBehaviour
             try
             {
                 byte[] data = udpClient.Receive(ref remoteEndPoint);
-                string gesture = Encoding.ASCII.GetString(data).Trim().ToLower();
-                Debug.Log("Received gesture: " + gesture);
+                string message = Encoding.ASCII.GetString(data).Trim().ToLower();
 
-                if (gesture == "l" || gesture == "r" || gesture == "f")
+                string[] parts = message.Split(',');
+
+                if (parts.Length == 4)
                 {
-                    UnityMainThreadDispatcher.Instance().Enqueue(() => MoveXROrigin(gesture));
+                    string pos = parts[0];
+                    int p0 = int.Parse(parts[1]);
+                    int p1 = int.Parse(parts[2]);
+                    int p2 = int.Parse(parts[3]);
+
+                    lock (this)
+                    {
+                        currentClass = pos;
+                        currentPressure[0] = p0;
+                        currentPressure[1] = p1;
+                        currentPressure[2] = p2;
+                    }
+
+                    Debug.Log("UDP: " + currentClass);
+
+                    OnClassReceived?.Invoke(currentClass); // Raise event
+                }
+                else
+                {
+                    Debug.LogWarning("Invalid UDP message format: " + message);
                 }
             }
-            catch (SocketException ex)
+            catch (Exception ex)
             {
-                Debug.Log("Socket exception: " + ex);
+                Debug.Log("UDP receive error: " + ex.Message);
             }
         }
-    }
-
-    void MoveXROrigin(string gesture)
-    {
-        if (xrOrigin == null) return;
-
-        Vector3 move = Vector3.zero;
-
-        switch (gesture)
-        {
-            case "l":
-                move = Vector3.left * moveAmount;
-                break;
-            case "r":
-                move = Vector3.right * moveAmount;
-                break;
-            case "f":
-                move = Vector3.forward * moveAmount;
-                break;
-        }
-
-        xrOrigin.transform.position += move;
     }
 
     void OnApplicationQuit()
     {
-        receiveThread.Abort();
-        udpClient.Close();
+        receiveThread?.Abort();
+        udpClient?.Close();
     }
 }

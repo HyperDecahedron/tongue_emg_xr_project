@@ -1,8 +1,10 @@
 
 import socket
 
-UNITY_IP = "130.229.189.54"  # Use the Quest or Unity PC IP if not running on the same machine
+UNITY_IP = "172.27.228.52"  # Use the Quest or Unity PC IP if not running on the same machine
 UNITY_PORT = 5052
+
+pressure = [50,0,0]
 
 # Create UDP socket
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -19,8 +21,12 @@ try:
 
         if key:
             message = key[0]  # Just the first character
-            sock.sendto(message.encode(), (UNITY_IP, UNITY_PORT))
-            print(f"Sent '{message}' to Unity at {UNITY_IP}:{UNITY_PORT}")
+
+            message = f"{message},{pressure[0]},{pressure[1]},{pressure[2]}"
+            try:
+                sock.sendto(message.encode('utf-8'), (UNITY_IP, UNITY_PORT))
+            except Exception as e:
+                print(f"Error sending UDP message: {e}")
 
 except KeyboardInterrupt:
     print("\nStopped by user.")

@@ -9,6 +9,7 @@ import pandas as pd
 import tkinter as tk
 from tkinter import ttk
 import threading
+import socket
 
 # ---------------- Settings -----------------
 USE_BANDPASS = 1
@@ -30,6 +31,11 @@ channels = ['ch_1', 'ch_2', 'ch_3']
 SLIGHT_PRESSURE = 30
 MEDIUM_PRESSURE = 60
 HARD_PRESSURE = 100
+
+# UDP communication
+UNITY_IP = "172.27.228.52"  # Use the Quest or Unity PC IP if not running on the same machine
+UNITY_PORT = 5052
+udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # ---------------- Filters -----------------
 def bandpass_filter(data, lowcut=5.0, highcut=120.0, fs=sampling_rate, order=4):
@@ -288,8 +294,7 @@ def run_model_loop(app):
             pos_label = pos_pred[0]  # e.g. 'l', 'f', 'r', 'n', 's'
 
             # Final filter: if a class l, f or r is happening for more than 4 instances, ALL following classes
-            # are overriden to that class until a class 'n' is detected. Class 's' is an exceptio to this. 
-
+            # are overriden to that class until a class 'n' is detected. Class 's' is an exception to this. 
 
             # Logic: track consecutive 's' (swallow) predictions
             if pos_label == 's':
@@ -353,6 +358,15 @@ def run_model_loop(app):
             # Update UI with filtered predictions
             app.root.after(0, app.update_bulbs, pos_label)
             app.root.after(0, app.update_sliders, filtered_pressure)
+
+            # Send filtered position and filtered pressure to Unity as a string like: "pos_label,filtered_pressure", "l,50,0,0"
+            pressure_values = [int(p) for p in filtered_pressure]  
+            message = f"{pos_label},{pressure_values[0]},{pressure_values[1]},{pressure_values[2]}"
+            try:
+                udp_socket.sendto(message.encode('utf-8'), (UNITY_IP, UNITY_PORT))
+            except Exception as e:
+                print(f"Error sending UDP message: {e}")
+
         else:
             # Sleep shortly to avoid busy loop
             time.sleep(0.5)
