@@ -50,7 +50,7 @@ public class UDP_Listener : MonoBehaviour
                         currentPressure[2] = p2;
                     }
 
-                    Debug.Log("UDP: " + currentClass);
+                    //Debug.Log("UDP: " + currentClass);
 
                     OnClassReceived?.Invoke(currentClass); // Raise event
                 }

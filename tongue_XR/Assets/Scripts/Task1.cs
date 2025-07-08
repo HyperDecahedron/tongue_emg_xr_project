@@ -5,119 +5,212 @@ using TMPro;
 
 public class Task1 : MonoBehaviour
 {
-    [SerializeField] private TextMeshProUGUI word;
-    [SerializeField] private TextMeshProUGUI word_counter;
+    // Text
+    [SerializeField] private TextMeshProUGUI selection_counter;
+
+    // Managers
     [SerializeField] private UDP_Listener udp_listener;
     [SerializeField] private TaskManager taskManager;
-    [SerializeField] private GameObject cubeLeft;
-    [SerializeField] private GameObject cubeRight;
     [SerializeField] private GameObject taskParent;
 
-    private Color highlight_red = new Color(1f, 0.49f, 0.49f);
-    private Color highlight_green = new Color(0.45f, 0.95f, 0.55f);
-    private Color original_red = new Color(1f, 0f, 0f);
-    private Color original_green = new Color(0f, 1f, 0.2f);
+    // Cubes
+    [SerializeField] private GameObject cubeLeft;
+    [SerializeField] private GameObject cubeFront;
+    [SerializeField] private GameObject cubeRight;
+    [SerializeField] private Renderer cubePanel;
 
-    private Vector3 cubeLeftOriginalScale;
-    private Vector3 cubeRightOriginalScale;
+    // Materials
+    [SerializeField] private Material greenMat;
+    [SerializeField] private Material yellowMat;
+    [SerializeField] private Material redMat;
 
-    private int word_count = 0;
-    private string[] words = { "cat", "dog", "chair", "book", "monkey", "computer", "lion", "elephant", "desk", "pencil" };
-    private int[] types = { 1, 1, 0, 0, 1, 0, 1, 1, 0, 0 }; // 1 animal, 0 object
-
-    private int leftCount = 0;
-    private int rightCount = 0;
+    private int correct_answers = 0;
+    private int total_answers = 0;
+    private int selection_count = 0;
     private bool awaitingInput = false;
+
+    private List<int> colours = new List<int> { 1, 2, 3, 2, 3, 1, 1, 3, 2, 1 }; // 1: left (green), 2: front (yellow), 3: right (red)
+
+    private string lastInput = "";
+    private int consecutiveCount = 0;
+    private int classes_in_a_row = 3;
+    private bool taskFinished = false;
 
     public void StartTask()
     {
-        cubeLeftOriginalScale = cubeLeft.transform.localScale;
-        cubeRightOriginalScale = cubeRight.transform.localScale;
+        selection_count = 0;
+        correct_answers = 0;
+        total_answers = 0;
+        taskFinished = false;
 
-        word_count = 0;
-
-        udp_listener.OnClassReceived += HandleClassInput; // subscribe
-        StartCoroutine(WordLoop());
+        udp_listener.OnClassReceived += HandleClassInput;
+        StartCoroutine(SelectionLoop());
     }
 
-    public void Hide()
-    {
-        taskParent.SetActive(false);
-    }
+    public void Hide() => taskParent.SetActive(false);
+    public void Show() => taskParent.SetActive(true);
 
-    public void Show()
+    private IEnumerator SelectionLoop()
     {
-        taskParent.SetActive(true);
-    }
-
-    private IEnumerator WordLoop()
-    {
-        while (word_count < words.Length)
+        while (selection_count < colours.Count)
         {
-            leftCount = 0;
-            rightCount = 0;
+            int target = colours[selection_count];
 
-            word.text = words[word_count];
-            word_counter.text = $"Word {word_count + 1} of {words.Length}";
-
-            ResetCubes();
+            // Animate panel cube color change
+            Material targetMat = GetMaterialFromIndex(target);
+            yield return StartCoroutine(AnimatePanelColor(targetMat));
+            selection_counter.text = $"{selection_count+1} / 10";
 
             awaitingInput = true;
+            lastInput = "";
+            consecutiveCount = 0;
 
-            // Wait until one side is selected
-            yield return new WaitUntil(() => leftCount >= 2 || rightCount >= 2);
+            // Wait for correct input
+            yield return new WaitUntil(() => consecutiveCount >= classes_in_a_row || taskFinished);
 
-            if (leftCount >= 2)
-                Highlight("l");
-            else if (rightCount >= 2)
-                Highlight("r");
+            if (taskFinished) yield break;
 
             awaitingInput = false;
+            GameObject selectedCube = GetCubeByInput(lastInput);
+
+            if (selectedCube != null)
+            {
+                StartCoroutine(ElevateCube(selectedCube)); // Visual feedback
+            }
+
+            // Check correctness
+            int selectedIndex = InputToIndex(lastInput);
+            if (selectedIndex == target)
+                correct_answers++;
+
+            total_answers++;
+            selection_count++;
 
             yield return new WaitForSeconds(1.5f);
-            word_count++;
         }
 
-        udp_listener.OnClassReceived -= HandleClassInput; // unsubscribe
-        taskManager.IntermediatePanel();
-        taskParent.SetActive(false);
-        this.gameObject.SetActive(false);
+        FinishTask();
     }
 
     private void HandleClassInput(string input)
     {
-        if (!awaitingInput) return;
+        if (!awaitingInput || taskFinished) return;
 
-        if (input == "l")
-            leftCount++;
-        else if (input == "r")
-            rightCount++;
-    }
+        if (input != "l" && input != "f" && input != "r") return;
 
-    private void Highlight(string side)
-    {
-        if (side == "l")
+        if (input == lastInput)
         {
-            cubeLeft.transform.localScale = cubeLeftOriginalScale * 1.2f;
-            cubeLeft.GetComponent<Renderer>().material.color = highlight_red;
-
-            Debug.Log(types[word_count] == 0 ? "Correct!" : "Incorrect.");
+            consecutiveCount++;
         }
-        else if (side == "r")
+        else
         {
-            cubeRight.transform.localScale = cubeRightOriginalScale * 1.2f;
-            cubeRight.GetComponent<Renderer>().material.color = highlight_green;
-
-            Debug.Log(types[word_count] == 1 ? "Correct!" : "Incorrect.");
+            lastInput = input;
+            consecutiveCount = 1;
         }
     }
 
-    private void ResetCubes()
+    private GameObject GetCubeByInput(string input)
     {
-        cubeLeft.transform.localScale = cubeLeftOriginalScale;
-        cubeRight.transform.localScale = cubeRightOriginalScale;
+        switch (input)
+        {
+            case "l": return cubeLeft;
+            case "f": return cubeFront;
+            case "r": return cubeRight;
+            default: return null;
+        }
+    }
 
-        cubeLeft.GetComponent<Renderer>().material.color = original_red;
-        cubeRight.GetComponent<Renderer>().material.color = original_green;
+    private int InputToIndex(string input)
+    {
+        switch (input)
+        {
+            case "l": return 1;
+            case "f": return 2;
+            case "r": return 3;
+            default: return 0;
+        }
+    }
+
+    // Smoothly elevates the selected cube for visual feedback
+    private IEnumerator ElevateCube(GameObject cube)
+    {
+        Vector3 originalPos = cube.transform.position;
+        Vector3 targetPos = originalPos + new Vector3(0, 0.1f, 0);
+        float duration = 0.3f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            cube.transform.position = Vector3.Lerp(originalPos, targetPos, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        cube.transform.position = targetPos;
+
+        yield return new WaitForSeconds(0.3f);
+
+        elapsed = 0f;
+        while (elapsed < duration)
+        {
+            cube.transform.position = Vector3.Lerp(targetPos, originalPos, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        cube.transform.position = originalPos;
+    }
+
+    // Shrinks, changes material, then expands the panel cube for color transition feedback
+    private IEnumerator AnimatePanelColor(Material newMat)
+    {
+        Vector3 originalScale = cubePanel.transform.localScale;
+        Vector3 shrunkenScale = originalScale * 0.5f;
+        float duration = 0.2f;
+        float elapsed = 0f;
+
+        // Shrink
+        while (elapsed < duration)
+        {
+            cubePanel.transform.localScale = Vector3.Lerp(originalScale, shrunkenScale, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        cubePanel.transform.localScale = shrunkenScale;
+
+        // Change material
+        cubePanel.material = newMat;
+
+        // Expand back
+        elapsed = 0f;
+        while (elapsed < duration)
+        {
+            cubePanel.transform.localScale = Vector3.Lerp(shrunkenScale, originalScale, elapsed / duration);
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        cubePanel.transform.localScale = originalScale;
+    }
+
+    private Material GetMaterialFromIndex(int index)
+    {
+        switch (index)
+        {
+            case 1: return greenMat;
+            case 2: return yellowMat;
+            case 3: return redMat;
+            default: return null;
+        }
+    }
+
+    public void FinishTask()
+    {
+        taskFinished = true;
+        Debug.Log($"Finished Task: Correct Answers = {correct_answers}, Total Answers = {total_answers}");
+
+        udp_listener.OnClassReceived -= HandleClassInput;
+        taskManager.IntermediatePanel();
+        taskParent.SetActive(false);
+        this.gameObject.SetActive(false);
     }
 }
