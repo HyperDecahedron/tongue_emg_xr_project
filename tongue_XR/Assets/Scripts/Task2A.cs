@@ -13,4 +13,9 @@ public class Task2A : MonoBehaviour
     {
 
     }
+
+    public void FinishTask()
+    {
+
+    }
 }

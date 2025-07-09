@@ -23,6 +23,11 @@ public class InspectorButtons : Editor
             controller.StartTask1B();
         }
 
+        if (GUILayout.Button("Start Task 1C"))
+        {
+            controller.StartTask1C();
+        }
+
         if (GUILayout.Button("Start Task 2A"))
         {
             controller.StartTask2A();
@@ -31,6 +36,16 @@ public class InspectorButtons : Editor
         if (GUILayout.Button("Start Task 2B"))
         {
             controller.StartTask2B();
+        }
+
+        if (GUILayout.Button("Skip Current Task"))
+        {
+            controller.SkipCurrentTask();
+        }
+
+        if (GUILayout.Button("Teleport XR Origin"))
+        {
+            controller.TeleportXROrigin();
         }
     }
 }

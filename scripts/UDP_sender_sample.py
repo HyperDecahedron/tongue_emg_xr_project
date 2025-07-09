@@ -1,7 +1,7 @@
 
 import socket
 
-UNITY_IP = "192.168.1.44"  # Use the Quest or Unity PC IP if not running on the same machine
+UNITY_IP = "172.27.228.52"  # Use the Quest or Unity PC IP if not running on the same machine
 UNITY_PORT = 5052
 
 pressure = [50,0,0]

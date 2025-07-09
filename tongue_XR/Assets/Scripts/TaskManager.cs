@@ -7,10 +7,13 @@ public class TaskManager : MonoBehaviour
 {
     [SerializeField] private TextMeshProUGUI startText;
     [SerializeField] private GameObject startPanel;
+    [SerializeField] private GameObject XROrigin;
+    [SerializeField] private Transform XROrigin_DesiredPosition;
 
     [Header("Tasks")]
-    [SerializeField] private Task1 task1A;
+    [SerializeField] private Task1A task1A;
     [SerializeField] private Task1B task1B;
+    [SerializeField] private Task1C task1C;
     [SerializeField] private Task2A task2A;
     [SerializeField] private Task2B task2B;
 
@@ -19,11 +22,12 @@ public class TaskManager : MonoBehaviour
     private void Start()
     {
         startPanel.SetActive(true);
-        startText.gameObject.SetActive(false);
+        startText.gameObject.SetActive(true);
 
         // Hide all tasks initially
         task1A.Hide();
         task1B.Hide();
+        task1C.Hide();
         task2A.Hide();
         task2B.Hide();
     }
@@ -39,6 +43,13 @@ public class TaskManager : MonoBehaviour
     {
         Debug.Log("Starting task 1B");
         task = "1B";
+        StartCoroutine(Do321_count());
+    }
+
+    public void StartTask1C()
+    {
+        Debug.Log("Starting task 1C");
+        task = "1C";
         StartCoroutine(Do321_count());
     }
 
@@ -84,6 +95,11 @@ public class TaskManager : MonoBehaviour
                 task1B.StartTask();
                 break;
 
+            case "1C":
+                task1C.Show();
+                task1C.StartTask();
+                break;
+
             case "2A":
                 task2A.Show();
                 task2A.StartTask();
@@ -100,6 +116,49 @@ public class TaskManager : MonoBehaviour
     {
         startPanel.SetActive(true);
         startText.gameObject.SetActive(true);
-        startText.text = "Wait for the next task.";
+        startText.text = "Good job!\nWait for the next task.";
     }
+
+    public void SkipCurrentTask()
+    {
+        switch (task)
+        {
+            case "1A":
+                task1A.FinishTask();
+                break;
+
+            case "1B":
+                task1B.FinishTask();
+                break;
+
+            case "1C":
+                task1C.FinishTask();
+                break;
+
+            case "2A":
+                task2A.FinishTask();
+                break;
+
+            case "2B":
+                task2B.FinishTask();
+                break;
+        }
+    }
+
+    public void TeleportXROrigin()
+    {
+        if (XROrigin == null || XROrigin_DesiredPosition == null)
+        {
+            Debug.LogWarning("XR Origin or Desired Position is not assigned.");
+            return;
+        }
+
+        // Move position
+        XROrigin.transform.position = XROrigin_DesiredPosition.position;
+
+        // Match rotation (usually just Y rotation matters in XR)
+        Vector3 newEulerAngles = new Vector3(0, XROrigin_DesiredPosition.eulerAngles.y, 0);
+        XROrigin.transform.rotation = Quaternion.Euler(newEulerAngles);
+    }
+
 }

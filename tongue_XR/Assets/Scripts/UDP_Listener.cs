@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System;
 using System.Net;
-using System.Net.Sockets;
+using System.Net.Sockets;       
 using System.Text;
-using System.Threading;
+using System.Threading;         
+using System.Collections.Concurrent;
 using UnityEngine;
 
 public class UDP_Listener : MonoBehaviour
@@ -13,7 +15,9 @@ public class UDP_Listener : MonoBehaviour
     public string currentClass = "n";
     public int[] currentPressure = new int[3];
 
-    public event Action<string> OnClassReceived; // event for updates
+    public event Action<string> OnClassReceived;
+
+    private ConcurrentQueue<string> mainThreadQueue = new ConcurrentQueue<string>();
 
     void Start()
     {
@@ -50,9 +54,7 @@ public class UDP_Listener : MonoBehaviour
                         currentPressure[2] = p2;
                     }
 
-                    //Debug.Log("UDP: " + currentClass);
-
-                    OnClassReceived?.Invoke(currentClass); // Raise event
+                    mainThreadQueue.Enqueue(currentClass); // queue input for main thread
                 }
                 else
                 {
@@ -63,6 +65,14 @@ public class UDP_Listener : MonoBehaviour
             {
                 Debug.Log("UDP receive error: " + ex.Message);
             }
+        }
+    }
+
+    void Update()
+    {
+        while (mainThreadQueue.TryDequeue(out string input))
+        {
+            OnClassReceived?.Invoke(input); // now safe — runs on Unity main thread
         }
     }
 
