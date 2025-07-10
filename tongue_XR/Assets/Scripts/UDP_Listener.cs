@@ -1,10 +1,9 @@
 using System.Collections.Concurrent;
 using System;
 using System.Net;
-using System.Net.Sockets;       
+using System.Net.Sockets;
 using System.Text;
-using System.Threading;         
-using System.Collections.Concurrent;
+using System.Threading;
 using UnityEngine;
 
 public class UDP_Listener : MonoBehaviour
@@ -15,9 +14,24 @@ public class UDP_Listener : MonoBehaviour
     public string currentClass = "n";
     public int[] currentPressure = new int[3];
 
-    public event Action<string> OnClassReceived;
+    // Define a struct to hold both class and pressure data
+    public struct UdpData
+    {
+        public string Class;
+        public int[] Pressure;
 
-    private ConcurrentQueue<string> mainThreadQueue = new ConcurrentQueue<string>();
+        public UdpData(string classLabel, int[] pressure)
+        {
+            Class = classLabel;
+            Pressure = pressure;
+        }
+    }
+
+    // Event that includes both class and pressure
+    public event Action<UdpData> OnDataReceived;
+
+    // Thread-safe queue to send data to Unity main thread
+    private ConcurrentQueue<UdpData> mainThreadQueue = new ConcurrentQueue<UdpData>();
 
     void Start()
     {
@@ -54,7 +68,9 @@ public class UDP_Listener : MonoBehaviour
                         currentPressure[2] = p2;
                     }
 
-                    mainThreadQueue.Enqueue(currentClass); // queue input for main thread
+                    // Create a new UdpData object and enqueue it
+                    UdpData udpData = new UdpData(pos, new int[] { p0, p1, p2 });
+                    mainThreadQueue.Enqueue(udpData);
                 }
                 else
                 {
@@ -70,9 +86,9 @@ public class UDP_Listener : MonoBehaviour
 
     void Update()
     {
-        while (mainThreadQueue.TryDequeue(out string input))
+        while (mainThreadQueue.TryDequeue(out UdpData data))
         {
-            OnClassReceived?.Invoke(input); // now safe — runs on Unity main thread
+            OnDataReceived?.Invoke(data); // Trigger event with full data
         }
     }
 

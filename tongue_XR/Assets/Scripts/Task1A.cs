@@ -104,7 +104,7 @@ public class Task1A : MonoBehaviour
         total_answers = 0;
         taskFinished = false;
 
-        udp_listener.OnClassReceived += HandleClassInput;
+        udp_listener.OnDataReceived += HandleClassInput;
         StartCoroutine(SelectionLoop());
     }
 
@@ -201,8 +201,10 @@ public class Task1A : MonoBehaviour
         FinishTask();
     }
 
-    private void HandleClassInput(string input)
+    private void HandleClassInput(UDP_Listener.UdpData data)
     {
+        string input = data.Class;
+
         if (!awaitingInput) return;
 
         if (input == lastInput)
@@ -298,7 +300,7 @@ public class Task1A : MonoBehaviour
             Debug.Log("CSV created");
         }
 
-        udp_listener.OnClassReceived -= HandleClassInput;
+        udp_listener.OnDataReceived -= HandleClassInput;
         taskManager.IntermediatePanel();
         taskParent.SetActive(false);
         this.gameObject.SetActive(false);

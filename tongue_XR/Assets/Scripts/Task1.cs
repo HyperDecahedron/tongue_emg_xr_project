@@ -43,7 +43,7 @@ public class Task1 : MonoBehaviour
         total_answers = 0;
         taskFinished = false;
 
-        udp_listener.OnClassReceived += HandleClassInput;
+        udp_listener.OnDataReceived += HandleClassInput;
         StartCoroutine(SelectionLoop());
     }
 
@@ -92,9 +92,11 @@ public class Task1 : MonoBehaviour
         FinishTask();
     }
 
-    private void HandleClassInput(string input)
+    private void HandleClassInput(UDP_Listener.UdpData data)
     {
         if (!awaitingInput || taskFinished) return;
+
+        string input = data.Class;
 
         if (input != "l" && input != "f" && input != "r") return;
 
@@ -208,7 +210,7 @@ public class Task1 : MonoBehaviour
         taskFinished = true;
         Debug.Log($"Finished Task: Correct Answers = {correct_answers}, Total Answers = {total_answers}");
 
-        udp_listener.OnClassReceived -= HandleClassInput;
+        udp_listener.OnDataReceived -= HandleClassInput;
         taskManager.IntermediatePanel();
         taskParent.SetActive(false);
         this.gameObject.SetActive(false);
